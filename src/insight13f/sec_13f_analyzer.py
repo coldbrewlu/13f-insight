@@ -1,15 +1,3 @@
-#!/usr/bin/env python3
-"""
-SEC 13F Portfolio Analysis Script
-================================
-
-This script automatically retrieves and analyzes 13F filings from the SEC EDGAR database
-to generate portfolio analysis tables similar to WhaleWisdom.
-
-Author: Claude AI Assistant
-Date: August 2025
-"""
-
 import requests
 import xml.etree.ElementTree as ET
 import re

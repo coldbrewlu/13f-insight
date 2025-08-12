@@ -1,0 +1,11 @@
+README.md
+setup.py
+src/insight13f/__init__.py
+src/insight13f/cli.py
+src/insight13f/sec_13f_analyzer.py
+src/insight13f.egg-info/PKG-INFO
+src/insight13f.egg-info/SOURCES.txt
+src/insight13f.egg-info/dependency_links.txt
+src/insight13f.egg-info/requires.txt
+src/insight13f.egg-info/top_level.txt
+tests/test_smoke.py
