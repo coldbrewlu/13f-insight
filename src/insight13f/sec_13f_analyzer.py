@@ -1,583 +1,431 @@
-import requests
-import xml.etree.ElementTree as ET
-import re
-import pandas as pd
-from collections import defaultdict
-from typing import Dict, List, Tuple, Optional
-import time
+#!/usr/bin/env python3
 import os
+import re
+import time
+import json
+import requests
+import pandas as pd
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from typing import Dict, List, Tuple, Optional
+from collections import defaultdict
+
 
 class SEC13FAnalyzer:
     """
-    Analyzes SEC 13F filings to extract portfolio holdings and changes
+    SEC 13F 分析器：
+    - 自动定位最近两个 13F filing
+    - 兼容多种文件形态（目录里的数字命名 XML，例如 39042.xml；或主 TXT/SGML；以及常见 form13fInfoTable.xml）
+    - 解析持仓市值与股数，计算组合权重变化（pp）与持股数变化（%）
+    - 产出 Top 20 持仓 / 买入 / 卖出
     """
-    
+
     def __init__(self, user_agent: str = "Investment Research analysis@example.com"):
-        """
-        Initialize the analyzer with SEC-compliant headers
-        
-        Args:
-            user_agent: User agent string for SEC requests (must include email)
-        """
-        self.headers = {'User-Agent': user_agent}
+        if "@" not in user_agent:
+            raise ValueError("SEC 要求 User-Agent 必须包含可联系的 email。")
         self.session = requests.Session()
-        self.session.headers.update(self.headers)
-        
-        # Enhanced ticker mapping for better readability
+        self.session.headers.update({"User-Agent": user_agent})
+
+        # 常用公司名到 ticker 的映射（节选，可继续补充）
         self.ticker_mapping = {
-            "APPLE INC": "AAPL",
-            "BANK OF AMERICA CORP": "BAC", 
-            "BANK AMER CORP": "BAC",
-            "AMERICAN EXPRESS CO": "AXP",
-            "COCA COLA CO": "KO", 
-            "COCA-COLA CO": "KO",
-            "CHEVRON CORP NEW": "CVX",
-            "CHEVRON CORP": "CVX",
-            "OCCIDENTAL PETE CORP": "OXY",
-            "OCCIDENTAL PETROLEUM CORP": "OXY",
-            "KRAFT HEINZ CO": "KHC",
-            "MOODYS CORP": "MCO",
-            "VERISIGN INC": "VRSN",
-            "DAVITA INC": "DVA",
-            "HP INC": "HPQ",
-            "CITIGROUP INC": "C",
-            "CAPITAL ONE FINL CORP": "COF",
-            "KROGER CO": "KR",
-            "DIAMONDBACK ENERGY INC": "FANG",
-            "MARSH & MCLENNAN COS INC": "MMC",
-            "MARCH & MCLENNAN COS INC": "MMC",
-            "NU HOLDINGS LTD": "NU",
-            "LIBERTY MEDIA CORP DELAWARE": "FWONA",
-            "LIBERTY MEDIA CORP DE A": "FWONA",
-            "LIBERTY MEDIA CORP DE C": "FWONK",
-            "AT&T INC": "T",
-            "PARAMOUNT GLOBAL": "PARA",
-            "VIACOMCBS INC": "PARA",
-            "DEUTSCHE TELEKOM AG": "DTEGY",
-            "FORMULA ONE GROUP": "FWONK",
-            "CHUBB LIMITED": "CB",
-            "VISA INC": "V",
-            "MASTERCARD INC": "MA",
-            "CONSTELLATION BRANDS INC": "STZ",
-            "ALLY FINL INC": "ALLY",
-            "AMAZON COM INC": "AMZN",
-            "CHARTER COMMUNICATIONS INC": "CHTR",
-            "DOMINOS PIZZA INC": "DPZ",
-            "HEICO CORP": "HEI",
-            "JEFFERIES FINL GROUP INC": "JEF",
-            "LENNAR CORP": "LEN",
-            "LOUISIANA PAC CORP": "LPX",
-            "NVR INC": "NVR",
-            "POOL CORP": "POOL",
-            "SIRIUS XM HOLDINGS INC": "SIRI",
-            "T-MOBILE US INC": "TMUS",
-            "AON PLC": "AON",
-            "LIBERTY LATIN AMERICA LTD": "LILA",
-            "DIAGEO P L C": "DEO",
-            "ATLANTA BRAVES HLDGS INC": "BATRA",
-            "MICROSOFT CORP": "MSFT",
-            "JOHNSON & JOHNSON": "JNJ",
-            "BERKSHIRE HATHAWAY INC": "BRK.B",
-            "JPMORGAN CHASE & CO": "JPM",
-            "PROCTER & GAMBLE CO": "PG",
-            "UNITEDHEALTH GROUP INC": "UNH",
-            "TESLA INC": "TSLA",
-            "NVIDIA CORP": "NVDA",
-            "META PLATFORMS INC": "META",
-            "ALPHABET INC": "GOOGL",
-            "WELLS FARGO & CO": "WFC",
-            "HOME DEPOT INC": "HD",
-            "PFIZER INC": "PFE"
+            "APPLE INC": "AAPL", "AMERICAN EXPRESS CO": "AXP", "BANK AMER CORP": "BAC",
+            "BANK OF AMERICA CORP": "BAC", "COCA COLA CO": "KO", "COCA-COLA CO": "KO",
+            "CHEVRON CORP NEW": "CVX", "OCCIDENTAL PETE CORP": "OXY", "KRAFT HEINZ CO": "KHC",
+            "MOODYS CORP": "MCO", "VERISIGN INC": "VRSN", "DAVITA INC": "DVA", "HP INC": "HPQ",
+            "CAPITAL ONE FINL CORP": "COF", "KROGER CO": "KR", "CHUBB LIMITED": "CB",
+            "VISA INC": "V", "MASTERCARD INC": "MA", "CONSTELLATION BRANDS INC": "STZ",
+            "AMAZON COM INC": "AMZN", "AON PLC": "AON", "SIRIUS XM HOLDINGS INC": "SIRI",
+            "DOMINOS PIZZA INC": "DPZ"
         }
-    
+
+    # ---------------------------
+    # 一、发现最近两个 13F filing
+    # ---------------------------
     def get_recent_13f_filings(self, cik: str) -> Tuple[str, str]:
-        """
-        Automatically discover the two most recent 13F filings for a given CIK
-        
-        This method:
-        1. Fetches the company's submission history from SEC
-        2. Filters for 13F-HR and 13F-HR/A forms
-        3. Sorts by filing date (newest first)
-        4. Returns current and previous quarter accession numbers
-        
-        Args:
-            cik: Company's Central Index Key (e.g., "0001067983" for Berkshire Hathaway)
-            
-        Returns:
-            Tuple of (current_accession, previous_accession)
-            
-        Raises:
-            Exception: If unable to find sufficient 13F filings
-        """
-        print(f"🔍 Searching for recent 13F filings for CIK: {cik}")
-        
-        # Format CIK to 10 digits with leading zeros
+        """返回 (current_accession, previous_accession)。会验证“前一份”确实含有持仓数据。"""
         cik_padded = f"{int(cik):010d}"
         url = f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
-        
-        try:
-            response = self.session.get(url, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as e:
-            raise Exception(f"Failed to fetch submission data: {e}")
-        
-        # Extract 13F filings
-        recent = data["filings"]["recent"]
-        filings = []
-        
-        for form, accession, filing_date in zip(recent["form"], 
-                                              recent["accessionNumber"], 
-                                              recent["filingDate"]):
-            if form in {"13F-HR", "13F-HR/A"}:
-                filings.append((form, accession, filing_date))
-        
-        if len(filings) < 2:
-            raise Exception(f"Found only {len(filings)} 13F filings, need at least 2")
-        
-        # Sort by filing date (newest first)
-        filings.sort(key=lambda x: x[2], reverse=True)
-        
-        # Handle amendments: prefer 13F-HR/A over 13F-HR for same period
-        # For simplicity, we'll take the two most recent by date
-        current_filing = filings[0]
-        previous_filing = filings[1]
-        
-        print(f"✅ Found current filing: {current_filing[1]} ({current_filing[2]})")
-        print(f"✅ Found previous filing: {previous_filing[1]} ({previous_filing[2]})")
-        
-        return current_filing[1], previous_filing[1]
-    
-    def fetch_13f_xml(self, cik: str, accession_number: str) -> Optional[str]:
+        r = self.session.get(url, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+
+        forms = data["filings"]["recent"]["form"]
+        accs = data["filings"]["recent"]["accessionNumber"]
+        dates = data["filings"]["recent"]["filingDate"]
+
+        cand = [(f, a, d) for f, a, d in zip(forms, accs, dates) if f in {"13F-HR", "13F-HR/A"}]
+        cand.sort(key=lambda x: x[2], reverse=True)
+        if len(cand) < 2:
+            raise RuntimeError("可用 13F 数量不足 2。")
+
+        current = cand[0][1]
+        # 逐个回溯，找到确有信息表的前一份
+        previous = None
+        for _, acc, _ in cand[1:5]:
+            content = self.fetch_13f_data(cik, acc)
+            if content and self._looks_like_info_table(content):
+                previous = acc
+                break
+        if not previous:
+            previous = cand[1][1]  # 兜底
+
+        return current, previous
+
+    # --------------------------------
+    # 二、抓取 filing 中的“信息表”原始内容
+    # --------------------------------
+    def fetch_13f_data(self, cik: str, accession_number: str) -> Optional[str]:
         """
-        Fetch the 13F XML data for a specific filing
-        
-        This method tries multiple possible XML file locations:
-        1. form13fInfoTable.xml (most common)
-        2. InfoTable.xml (alternative naming)
-        3. primary_doc.xml (sometimes used)
-        4. Constructed filename with accession number
-        
-        Args:
-            cik: Company's CIK
-            accession_number: SEC accession number (with dashes)
-            
-        Returns:
-            XML content as string, or None if not found
+        统一抓取入口：
+        1) 先读目录 JSON: /index.json，找 *.xml 并逐个验证是否像信息表（informationTable/infoTable）
+        2) 如果目录没有合适 XML，则尝试“主 TXT” {accession}.txt（许多历史 filing 可用）
+        3) 最后再尝试常见的 form13fInfoTable.xml 命名
+        返回原始文本（XML/TXT/HTML 其一）
         """
-        print(f"📥 Fetching XML for accession: {accession_number}")
-        
-        # Remove dashes from accession number for URL construction
-        accession_clean = accession_number.replace('-', '')
+        content = self._fetch_from_directory_index(cik, accession_number)
+        if content:
+            return content
+
+        content = self._fetch_primary_txt(cik, accession_number)
+        if content:
+            return content
+
+        content = self._fetch_by_common_xml_patterns(cik, accession_number)
+        return content
+
+    def _dir_index_url(self, cik: str, accession_number: str) -> str:
+        acc_clean = accession_number.replace("-", "")
         cik_int = int(cik)
-        
-        # Try multiple possible XML file locations
-        possible_urls = [
-            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_clean}/form13fInfoTable.xml",
-            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_clean}/InfoTable.xml",
-            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_clean}/primary_doc.xml",
-            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_clean}/d{accession_clean[:12]}inftable.xml"
-        ]
-        
-        for url in possible_urls:
+        return f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/index.json"
+
+    def _fetch_from_directory_index(self, cik: str, accession_number: str) -> Optional[str]:
+        """读取目录 index.json，优先尝试数字命名 XML（例如 39042.xml）。"""
+        idx_url = self._dir_index_url(cik, accession_number)
+        r = self.session.get(idx_url, timeout=30)
+        if r.status_code != 200:
+            return None
+
+        j = r.json()
+        base = j["directory"]["name"]  # 例如 /Archives/edgar/data/1067983/0000...
+        items = j["directory"]["item"]
+        xml_names = [it["name"] for it in items if it["name"].lower().endswith(".xml")]
+
+        for name in xml_names:
+            url = f"https://www.sec.gov{base}/{name}"
             try:
-                print(f"  Trying: {url}")
-                response = self.session.get(url, timeout=30)
-                if response.status_code == 200:
-                    print(f"  ✅ Success!")
-                    return response.text
-                else:
-                    print(f"  ❌ HTTP {response.status_code}")
-            except Exception as e:
-                print(f"  ❌ Error: {e}")
+                t = self.session.get(url, timeout=30).text
+                if self._looks_like_info_table(t):
+                    return t
+            except requests.RequestException:
                 continue
-        
-        print(f"⚠️  Could not fetch XML for {accession_number}")
         return None
-    
-    def parse_13f_xml(self, xml_content: str, aggregate_by_cusip8: bool = True) -> Dict:
-        """
-        Parse 13F XML content and extract holdings information
-        
-        This method:
-        1. Removes XML namespaces for easier parsing
-        2. Finds all infoTable entries
-        3. Extracts issuer name, CUSIP, and market value
-        4. Optionally aggregates by CUSIP-8 (first 8 digits) to combine share classes
-        5. Handles errors gracefully and continues processing
-        
-        Args:
-            xml_content: Raw XML content from SEC
-            aggregate_by_cusip8: If True, aggregate holdings by first 8 digits of CUSIP
-            
-        Returns:
-            Dictionary mapping CUSIP (or CUSIP-8) to holding information
-        """
-        print(f"🔄 Parsing XML content...")
-        
-        # Remove namespace declarations for easier parsing
-        xml_clean = re.sub(r' xmlns="[^"]+"', '', xml_content, count=1)
-        
+
+    def _fetch_primary_txt(self, cik: str, accession_number: str) -> Optional[str]:
+        """尝试 {accession}.txt 主文档（SGML/TXT 内含信息表）。"""
+        acc_clean = accession_number.replace("-", "")
+        cik_int = int(cik)
+        url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/{accession_number}.txt"
+        r = self.session.get(url, timeout=30)
+        if r.status_code == 200 and self._looks_like_info_table(r.text):
+            return r.text
+        return None
+
+    def _fetch_by_common_xml_patterns(self, cik: str, accession_number: str) -> Optional[str]:
+        """最后尝试常见命名的 XML。"""
+        acc_clean = accession_number.replace("-", "")
+        cik_int = int(cik)
+        patterns = [
+            "form13fInfoTable.xml", "InfoTable.xml",
+            "xslForm13F_X01/form13fInfoTable.xml", "xslForm13F_X01/InfoTable.xml",
+            f"d{acc_clean[:12]}inftable.xml", "informationTable.xml", "table.xml", "holdings.xml",
+            "primary_doc.xml"
+        ]
+        for pat in patterns:
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/{pat}"
+            r = self.session.get(url, timeout=30)
+            if r.status_code == 200 and self._looks_like_info_table(r.text):
+                return r.text
+        return None
+
+    # ---------------------------
+    # 三、解析：支持 XML / TXT / HTML
+    # ---------------------------
+    def parse_13f_data(self, content: str, aggregate_by_cusip8: bool = True) -> Dict:
+        """自动识别格式并解析为 {cusip: {company_name, market_value, shares}}"""
+        s = content.lstrip()
+        if s.startswith("<"):
+            # XML/HTML
+            if "informationtable" in s.lower() or "infotable" in s.lower():
+                return self._parse_xml_format(s, aggregate_by_cusip8)
+            return self._parse_html_format(s, aggregate_by_cusip8)
+        # TXT/SGML
+        return self._parse_txt_sgml_format(content, aggregate_by_cusip8)
+
+    def _parse_xml_format(self, xml_content: str, aggregate_by_cusip8: bool) -> Dict:
+        xml_clean = re.sub(r' xmlns="[^"]+"', "", xml_content, count=1)
         try:
             root = ET.fromstring(xml_clean)
-        except ET.ParseError as e:
-            print(f"❌ XML parsing error: {e}")
+        except ET.ParseError:
             return {}
-        
-        # Dictionary to store aggregated holdings
-        holdings = defaultdict(lambda: {"company_name": "", "market_value": 0.0})
-        
-        # Find all information tables
-        info_tables = root.findall('.//infoTable')
-        print(f"  Found {len(info_tables)} holdings entries")
-        
-        processed = 0
-        errors = 0
-        
-        for table in info_tables:
+
+        holdings = defaultdict(lambda: {"company_name": "", "market_value": 0.0, "shares": 0})
+        for table in root.findall(".//infoTable"):
             try:
-                # Extract required fields
-                issuer_elem = table.find('.//nameOfIssuer')
-                cusip_elem = table.find('.//cusip')
-                value_elem = table.find('.//value')
-                
-                if issuer_elem is None or cusip_elem is None or value_elem is None:
-                    errors += 1
-                    continue
-                
-                issuer_name = issuer_elem.text.strip().upper()
-                cusip_full = cusip_elem.text.strip()
-                
-                # Market value is in thousands of USD in the XML
-                market_value_thousands = float(value_elem.text.strip())
-                market_value_usd = market_value_thousands * 1000
-                
-                # Decide on aggregation key
-                if aggregate_by_cusip8:
-                    cusip_key = cusip_full[:8]  # First 8 digits for share class aggregation
-                else:
-                    cusip_key = cusip_full
-                
-                # Aggregate market values
-                holdings[cusip_key]["market_value"] += market_value_usd
-                
-                # Keep the first non-empty company name we encounter
-                if not holdings[cusip_key]["company_name"] and issuer_name:
-                    holdings[cusip_key]["company_name"] = issuer_name
-                
-                processed += 1
-                
-            except (AttributeError, ValueError, TypeError) as e:
-                errors += 1
+                name = (table.find(".//nameOfIssuer").text or "").strip().upper()
+                cusip = (table.find(".//cusip").text or "").strip()
+                val_th = float((table.find(".//value").text or "0").strip())
+                mv = val_th * 1000
+                sh = 0
+                sh_node = table.find(".//shrsOrPrnAmt/sshPrnamt")
+                if sh_node is not None and sh_node.text:
+                    sh = int(float(sh_node.text.strip()))
+                key = cusip[:8] if aggregate_by_cusip8 else cusip
+                holdings[key]["market_value"] += mv
+                holdings[key]["shares"] += sh
+                if not holdings[key]["company_name"]:
+                    holdings[key]["company_name"] = name
+            except Exception:
                 continue
-        
-        print(f"  ✅ Processed {processed} holdings, {errors} errors")
         return dict(holdings)
-    
+
+    def _parse_txt_sgml_format(self, txt: str, aggregate_by_cusip8: bool) -> Dict:
+        holdings = defaultdict(lambda: {"company_name": "", "market_value": 0.0, "shares": 0})
+        lines = txt.splitlines()
+        in_table = False
+        for ln in lines:
+            low = ln.lower()
+            if not in_table and any(k in low for k in ["information table", "<informationtable", "<infotable", "info table"]):
+                in_table = True
+                continue
+            if in_table and any(k in low for k in ["</informationtable", "</infotable", "<signature", "<signatures"]):
+                in_table = False
+            if not in_table:
+                continue
+
+            m_cusip = re.search(r"\b([A-Z0-9]{9})\b", ln)
+            if not m_cusip:
+                continue
+            cusip_full = m_cusip.group(1)
+            # 取 CUSIP 前的文本当作公司名（粗略但有效）
+            parts = ln.split()
+            name = ""
+            for j, p in enumerate(parts):
+                if cusip_full in p:
+                    name = " ".join(parts[:j]).strip().upper()
+                    name = re.sub(r"[<>]", "", name)
+                    break
+            # 行内数字：大概率包含 shares 和 value(thousands)
+            nums = [int(n.replace(",", "")) for n in re.findall(r"\b(\d{1,3}(?:,\d{3})*|\d+)\b", ln)]
+            if not nums:
+                continue
+            nums.sort(reverse=True)
+            shares = nums[0]
+            value_th = nums[-1] if len(nums) > 1 else max(shares // 1000, 0)
+            mv = value_th * 1000
+            key = cusip_full[:8] if aggregate_by_cusip8 else cusip_full
+            holdings[key]["market_value"] += mv
+            holdings[key]["shares"] += shares
+            if not holdings[key]["company_name"] and name:
+                holdings[key]["company_name"] = name
+        # 若抽取过少，使用备用 SGML 抽取
+        if len(holdings) < 5:
+            return self._parse_sgml_alternative(txt, aggregate_by_cusip8)
+        return dict(holdings)
+
+    def _parse_sgml_alternative(self, txt: str, aggregate_by_cusip8: bool) -> Dict:
+        holdings = defaultdict(lambda: {"company_name": "", "market_value": 0.0, "shares": 0})
+        cusips = list(re.finditer(r"(?:CUSIP|cusip)\s*[: ]\s*([A-Z0-9]{9})", txt))
+        for m in cusips:
+            cusip = m.group(1)
+            start = max(0, m.start() - 500)
+            end = min(len(txt), m.end() + 500)
+            chunk = txt[start:end]
+            name = ""
+            m_name = re.search(r"(?:NAMEOFISSUER|NAME OF ISSUER|nameofissuer)\s*[: ]\s*([^\n<]+)", chunk, re.I)
+            if m_name:
+                name = re.sub(r"[<>/]", "", m_name.group(1)).strip().upper()
+            mv = 0
+            m_val = re.search(r"(?:VALUE|value)\s*[: ]\s*(\d{1,3}(?:,\d{3})*|\d+)", chunk)
+            if m_val:
+                mv = int(m_val.group(1).replace(",", "")) * 1000
+            sh = 0
+            m_sh = re.search(r"(?:SSHPRNAMT|sshprnamt|SHARES)\s*[: ]\s*(\d{1,3}(?:,\d{3})*|\d+)", chunk)
+            if m_sh:
+                sh = int(m_sh.group(1).replace(",", ""))
+            if mv > 0 or sh > 0:
+                key = cusip[:8] if aggregate_by_cusip8 else cusip
+                holdings[key]["market_value"] += mv
+                holdings[key]["shares"] += sh
+                if not holdings[key]["company_name"] and name:
+                    holdings[key]["company_name"] = name
+        return dict(holdings)
+
+    def _parse_html_format(self, html: str, aggregate_by_cusip8: bool) -> Dict:
+        holdings = defaultdict(lambda: {"company_name": "", "market_value": 0.0, "shares": 0})
+        for m in re.finditer(r"([A-Z0-9]{9})", html):
+            cusip = m.group(1)
+            start = max(0, m.start() - 800)
+            end = min(len(html), m.end() + 800)
+            chunk = html[start:end]
+            name = ""
+            m_name = re.search(r"(?:NAMEOFISSUER|nameofissuer)[^>]*>([^<]+)", chunk, re.I)
+            if m_name:
+                name = re.sub(r"&[^;]+;", "", m_name.group(1)).strip().upper()
+            nums = [int(n.replace(",", "")) for n in re.findall(r">(\d{1,3}(?:,\d{3})*)<", chunk)]
+            if nums:
+                nums.sort(reverse=True)
+                shares = nums[0]
+                value_th = nums[-1] if len(nums) > 1 else max(shares // 1000, 0)
+                mv = value_th * 1000
+                key = cusip[:8] if aggregate_by_cusip8 else cusip
+                holdings[key]["market_value"] += mv
+                holdings[key]["shares"] += shares
+                if not holdings[key]["company_name"] and name:
+                    holdings[key]["company_name"] = name
+        return dict(holdings)
+
+    # ---------------------------
+    # 四、指标计算与表格生成
+    # ---------------------------
     def get_ticker_symbol(self, company_name: str) -> str:
-        """
-        Map company name to ticker symbol for better readability
-        
-        Args:
-            company_name: Company name from 13F filing
-            
-        Returns:
-            Ticker symbol if found, otherwise 'N/A'
-        """
-        # Clean and normalize company name
-        clean_name = company_name.strip().upper()
-        
-        # Direct lookup
-        if clean_name in self.ticker_mapping:
-            return self.ticker_mapping[clean_name]
-        
-        # Try some common variations
-        for pattern, ticker in self.ticker_mapping.items():
-            if pattern in clean_name or clean_name in pattern:
-                return ticker
-        
-        return 'N/A'
-    
-    def calculate_portfolio_changes(self, current_holdings: Dict, 
-                                  previous_holdings: Dict) -> List[Dict]:
-        """
-        Calculate portfolio weight changes between two periods
-        
-        This method:
-        1. Calculates total portfolio values for both periods
-        2. Computes portfolio weights (% of total) for each holding
-        3. Calculates the change in portfolio weight
-        4. Handles new positions (previous weight = 0) and exits (current weight = 0)
-        
-        Args:
-            current_holdings: Holdings from current quarter
-            previous_holdings: Holdings from previous quarter
-            
-        Returns:
-            List of dictionaries with holding analysis data
-        """
-        print("📊 Calculating portfolio changes...")
-        
-        # Calculate total portfolio values
-        total_current = sum(h["market_value"] for h in current_holdings.values()) or 1.0
-        total_previous = sum(h["market_value"] for h in previous_holdings.values()) or 1.0
-        
-        print(f"  Current portfolio value: ${total_current:,.0f}")
-        print(f"  Previous portfolio value: ${total_previous:,.0f}")
-        
-        # Get all unique CUSIPs from both periods
-        all_cusips = set(current_holdings.keys()) | set(previous_holdings.keys())
-        
-        results = []
-        
-        for cusip in all_cusips:
-            # Get holding data for both periods
-            current_data = current_holdings.get(cusip, {"company_name": "", "market_value": 0.0})
-            previous_data = previous_holdings.get(cusip, {"company_name": "", "market_value": 0.0})
-            
-            # Use the most recent company name
-            company_name = current_data["company_name"] or previous_data["company_name"]
-            ticker = self.get_ticker_symbol(company_name)
-            
-            # Calculate portfolio weights
-            weight_current = (current_data["market_value"] / total_current) * 100
-            weight_previous = (previous_data["market_value"] / total_previous) * 100
-            weight_change = weight_current - weight_previous
-            
-            # Determine position status
-            if previous_data["market_value"] == 0:
-                status = "NEW"  # New position
-            elif current_data["market_value"] == 0:
-                status = "EXIT"  # Exited position
-            else:
-                status = "CHANGE"  # Changed position
-            
-            results.append({
-                "cusip": cusip,
-                "company_name": company_name,
-                "ticker": ticker,
-                "current_value": current_data["market_value"],
-                "previous_value": previous_data["market_value"],
-                "weight_current": weight_current,
-                "weight_previous": weight_previous,
-                "weight_change": weight_change,
+        nm = (company_name or "").strip().upper()
+        if nm in self.ticker_mapping:
+            return self.ticker_mapping[nm]
+        for pat, tk in self.ticker_mapping.items():
+            if pat in nm or nm in pat:
+                return tk
+        return "N/A"
+
+    def calculate_portfolio_changes(self, cur: Dict, prev: Dict) -> List[Dict]:
+        """计算权重变化（pp）与股数变化（%）"""
+        tot_c = sum(x["market_value"] for x in cur.values()) or 1.0
+        tot_p = sum(x["market_value"] for x in prev.values()) or 1.0
+        all_keys = set(cur) | set(prev)
+        out = []
+        for k in all_keys:
+            c = cur.get(k, {"company_name": "", "market_value": 0.0, "shares": 0})
+            p = prev.get(k, {"company_name": "", "market_value": 0.0, "shares": 0})
+            name = c["company_name"] or p["company_name"]
+            ticker = self.get_ticker_symbol(name)
+            w_c = (c["market_value"] / tot_c) * 100
+            w_p = (p["market_value"] / tot_p) * 100
+            w_delta = w_c - w_p
+            sh_c, sh_p = c["shares"], p["shares"]
+            sh_pct = ((sh_c - sh_p) / sh_p * 100) if sh_p > 0 else None
+            status = "NEW" if p["market_value"] == 0 else ("EXIT" if c["market_value"] == 0 else "CHANGE")
+            out.append({
+                "cusip": k, "company_name": name, "ticker": ticker,
+                "current_value": c["market_value"], "previous_value": p["market_value"],
+                "current_shares": sh_c, "previous_shares": sh_p,
+                "weight_current": w_c, "weight_previous": w_p, "weight_change": w_delta,
+                "share_change_abs": sh_c - sh_p, "share_change_pct": sh_pct,
                 "status": status
             })
-        
-        print(f"  ✅ Analyzed {len(results)} unique positions")
-        return results
-    
-    def generate_tables(self, analysis_data: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+        return out
+
+    def generate_tables(self, rows: List[Dict], sort_by_share_change: bool) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+
         """
-        Generate the three required tables from analysis data
-        
-        Args:
-            analysis_data: List of position analysis dictionaries
-            
-        Returns:
-            Tuple of (top_holdings, top_buys, top_sells)
+        生成三张表：
+        - Top Holdings：仍按当前权重排序（不变）
+        - Top Buys：只保留“股数增加且占比上升”的标的，按 Δpp 降序取前 10
+        - Top Sells：只保留“股数减少且占比下降”的标的，按 Δpp 升序取前 20
         """
-        print("📋 Generating analysis tables...")
-        
-        # Table 1: Top 20 Holdings by current portfolio weight
-        top_holdings = sorted(
-            analysis_data, 
-            key=lambda x: x["weight_current"], 
-            reverse=True
-        )[:20]
-        
-        # Table 2: Top 20 Buys (largest positive weight changes)
-        buys = [item for item in analysis_data if item["weight_change"] > 0]
-        top_buys = sorted(buys, key=lambda x: x["weight_change"], reverse=True)[:20]
-        
-        # Table 3: Top 20 Sells (largest negative weight changes)
-        sells = [item for item in analysis_data if item["weight_change"] < 0]
-        top_sells = sorted(sells, key=lambda x: x["weight_change"])[:20]  # Most negative first
-        
-        print(f"  📈 Top Holdings: {len(top_holdings)} entries")
-        print(f"  📈 Top Buys: {len(top_buys)} entries") 
-        print(f"  📉 Top Sells: {len(top_sells)} entries")
-        
+        # 1) Top holdings：当前仍持有的头部权重
+        current_positions = [r for r in rows if r["current_value"] > 0]
+        top_holdings = sorted(current_positions, key=lambda x: x["weight_current"], reverse=True)[:20]
+
+        # 2) 只统计“真买入/真卖出”（股数发生变化）
+        buys_candidates = [
+            r for r in rows
+            if r["share_change_abs"] > 0 and r["weight_change"] > 0
+        ]
+        sells_candidates = [
+            r for r in rows
+            if r["share_change_abs"] < 0 and r["weight_change"] < 0
+        ]
+
+        # 3) 排序与截断
+        #   与网站一致：按组合占比变动（pp）排序，而不是按股数变化百分比
+        top_buys = sorted(buys_candidates, key=lambda x: x["weight_change"], reverse=True)[:10]
+        top_sells = sorted(sells_candidates, key=lambda x: x["weight_change"])[:20]
+
         return top_holdings, top_buys, top_sells
-    
-    def print_table(self, title: str, data: List[Dict], table_type: str = "holdings"):
-        """
-        Print a formatted table to console
-        
-        Args:
-            title: Table title
-            data: List of data dictionaries
-            table_type: Type of table ("holdings", "buys", or "sells")
-        """
-        print(f"\n{title}")
-        print("=" * len(title))
-        
-        if table_type == "holdings":
-            print(f"{'Rank':<4} {'Company (Ticker)':<40} {'% Portfolio':>12} {'Change':>10} {'Status':>8}")
-            print("-" * 84)
-            for i, row in enumerate(data, 1):
-                company_display = f"{row['company_name'][:30]} ({row['ticker']})"
-                print(f"{i:<4} {company_display:<40} {row['weight_current']:>11.2f}% {row['weight_change']:>9.2f}% {row['status']:>8}")
-        
-        elif table_type == "buys":
-            print(f"{'Rank':<4} {'Company (Ticker)':<40} {'% Portfolio':>12} {'Increase':>10} {'Status':>8}")
-            print("-" * 84)
-            for i, row in enumerate(data, 1):
-                company_display = f"{row['company_name'][:30]} ({row['ticker']})"
-                print(f"{i:<4} {company_display:<40} {row['weight_current']:>11.2f}% {row['weight_change']:>9.2f}% {row['status']:>8}")
-        
-        elif table_type == "sells":
-            print(f"{'Rank':<4} {'Company (Ticker)':<40} {'% Portfolio':>12} {'Decrease':>10} {'Status':>8}")
-            print("-" * 84)
-            for i, row in enumerate(data, 1):
-                company_display = f"{row['company_name'][:30]} ({row['ticker']})"
-                print(f"{i:<4} {company_display:<40} {row['weight_current']:>11.2f}% {row['weight_change']:>9.2f}% {row['status']:>8}")
-    
-    def export_to_csv(self, top_holdings: List[Dict], top_buys: List[Dict], 
-                     top_sells: List[Dict], filename_prefix: str = "13f_analysis"):
-        """
-        Export analysis results to CSV files
-        
-        Args:
-            top_holdings: Top holdings data
-            top_buys: Top buys data  
-            top_sells: Top sells data
-            filename_prefix: Prefix for output filenames
-        """
-        print(f"\n💾 Exporting results to CSV...")
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Export top holdings
-        if top_holdings:
-            df_holdings = pd.DataFrame(top_holdings)
-            holdings_file = f"{filename_prefix}_holdings_{timestamp}.csv"
-            df_holdings.to_csv(holdings_file, index=False)
-            print(f"  ✅ Saved: {holdings_file}")
-        
-        # Export top buys
-        if top_buys:
-            df_buys = pd.DataFrame(top_buys)
-            buys_file = f"{filename_prefix}_buys_{timestamp}.csv"
-            df_buys.to_csv(buys_file, index=False)
-            print(f"  ✅ Saved: {buys_file}")
-        
-        # Export top sells
-        if top_sells:
-            df_sells = pd.DataFrame(top_sells)
-            sells_file = f"{filename_prefix}_sells_{timestamp}.csv"
-            df_sells.to_csv(sells_file, index=False)
-            print(f"  ✅ Saved: {sells_file}")
-    
-    def analyze_institution(self, cik: str, export_csv: bool = True) -> Dict:
-        """
-        Complete analysis workflow for an institution
-        
-        This is the main method that orchestrates the entire analysis:
-        1. Discovers recent 13F filings
-        2. Downloads and parses XML data
-        3. Calculates portfolio changes
-        4. Generates analysis tables
-        5. Displays results and optionally exports to CSV
-        
-        Args:
-            cik: Institution's Central Index Key
-            export_csv: Whether to export results to CSV files
-            
-        Returns:
-            Dictionary containing all analysis results
-        """
-        print(f"\n🎯 Starting 13F Analysis for CIK: {cik}")
-        print("="*60)
-        
-        try:
-            # Step 1: Find recent filings
-            current_accession, previous_accession = self.get_recent_13f_filings(cik)
-            
-            # Add delay to be respectful to SEC servers
-            time.sleep(0.1)
-            
-            # Step 2: Download XML data
-            current_xml = self.fetch_13f_xml(cik, current_accession)
-            if not current_xml:
-                raise Exception("Could not fetch current quarter XML")
-            
-            time.sleep(0.1)
-            
-            previous_xml = self.fetch_13f_xml(cik, previous_accession)
-            if not previous_xml:
-                raise Exception("Could not fetch previous quarter XML")
-            
-            # Step 3: Parse XML data
-            current_holdings = self.parse_13f_xml(current_xml)
-            previous_holdings = self.parse_13f_xml(previous_xml)
-            
-            if not current_holdings:
-                raise Exception("No current holdings data found")
-            
-            # Step 4: Calculate changes
-            analysis_data = self.calculate_portfolio_changes(current_holdings, previous_holdings)
-            
-            # Step 5: Generate tables
-            top_holdings, top_buys, top_sells = self.generate_tables(analysis_data)
-            
-            # Step 6: Display results
-            self.print_table("📊 TOP 20 HOLDINGS", top_holdings, "holdings")
-            self.print_table("📈 TOP 20 BUYS", top_buys, "buys")
-            self.print_table("📉 TOP 20 SELLS", top_sells, "sells")
-            
-            # Step 7: Export if requested
-            if export_csv:
-                self.export_to_csv(top_holdings, top_buys, top_sells, f"cik_{cik}")
-            
-            # Return results
-            results = {
-                "cik": cik,
-                "current_accession": current_accession,
-                "previous_accession": previous_accession,
-                "top_holdings": top_holdings,
-                "top_buys": top_buys,
-                "top_sells": top_sells,
-                "analysis_data": analysis_data
-            }
-            
-            print(f"\n✅ Analysis completed successfully!")
-            return results
-            
-        except Exception as e:
-            print(f"\n❌ Analysis failed: {e}")
-            raise
+
+
+    # ---------------------------
+    # 五、主流程
+    # ---------------------------
+    def analyze_institution(self, cik: str, export_csv: bool = False, sort_by_share_change: bool = False) -> Dict:
+        cur_acc, prev_acc = self.get_recent_13f_filings(cik)
+        time.sleep(0.2)
+        cur_raw = self.fetch_13f_data(cik, cur_acc)
+        if not cur_raw:
+            raise RuntimeError(f"未找到信息表: {cur_acc}")
+        time.sleep(0.2)
+        prev_raw = self.fetch_13f_data(cik, prev_acc)  # 可能为 None（极少数）
+        cur_hold = self.parse_13f_data(cur_raw)
+        prev_hold = self.parse_13f_data(prev_raw) if prev_raw else {}
+        rows = self.calculate_portfolio_changes(cur_hold, prev_hold)
+        top_hold, top_buy, top_sell = self.generate_tables(rows, sort_by_share_change)
+
+        if export_csv:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pd.DataFrame(top_hold).to_csv(f"cik_{cik}_holdings_{ts}.csv", index=False)
+            pd.DataFrame(top_buy).to_csv(f"cik_{cik}_buys_{ts}.csv", index=False)
+            pd.DataFrame(top_sell).to_csv(f"cik_{cik}_sells_{ts}.csv", index=False)
+
+        return {
+            "cik": cik,
+            "current_accession": cur_acc,
+            "previous_accession": prev_acc,
+            "top_holdings": top_hold,
+            "top_buys": top_buy,
+            "top_sells": top_sell,
+            "analysis_data": rows,
+            "has_previous_data": bool(prev_hold),
+            "sort_by_share_change": sort_by_share_change,
+        }
+
+    # ---------------------------
+    # 六、辅助
+    # ---------------------------
+    def _looks_like_info_table(self, text: str) -> bool:
+        s = (text or "").lower()
+        if not s:
+            return False
+        hits = sum(k in s for k in ["informationtable", "infotable", "nameofissuer", "cusip"])
+        # 过滤只有 cover/summary 的主 XML
+        if "edgarsubmission" in s and "infotable" not in s and "informationtable" not in s:
+            return False
+        return hits >= 2
 
 
 def main():
-    """
-    Main execution function with example usage
-    """
-    # Initialize analyzer with SEC-compliant user agent
-    # NOTE: Replace with your actual email address for SEC compliance
-    analyzer = SEC13FAnalyzer("Investment Research analysis@example.com")
-    
-    # Berkshire Hathaway CIK
-    berkshire_cik = "0001067983"
-    
-    try:
-        # Run complete analysis
-        results = analyzer.analyze_institution(berkshire_cik, export_csv=True)
-        
-        print(f"\n📋 Analysis Summary:")
-        print(f"Current filing: {results['current_accession']}")
-        print(f"Previous filing: {results['previous_accession']}")
-        print(f"Total positions analyzed: {len(results['analysis_data'])}")
-        
-        # You can also analyze other institutions by changing the CIK
-        # For example:
-        # - Warren Buffett's Berkshire Hathaway: "0001067983"
-        # - Bill & Melinda Gates Foundation Trust: "0001166559"  
-        # - Vanguard Group: "0000102909"
-        
-    except Exception as e:
-        print(f"Error in analysis: {e}")
+    analyzer = SEC13FAnalyzer(os.getenv("USER_AGENT", "Investment Research analysis@example.com"))
+    cik = "0001067983"  # Berkshire Hathaway
+    res = analyzer.analyze_institution(cik, export_csv=False, sort_by_share_change=False)
+
+    def _print(title, data, kind):
+        print("\n" + title)
+        print("=" * len(title))
+        if kind == "hold":
+            print(f"{'Rank':<4} {'Company (Ticker)':<40} {'% Port':>8} {'Δ pp':>8} {'% Change(shares)':>17} {'Status':>8}")
+            for i, r in enumerate(data, 1):
+                pct = f"{r['share_change_pct']:.2f}%" if r['share_change_pct'] is not None else "N/A"
+                nm = f"{r['company_name'][:30]} ({r['ticker']})"
+                print(f"{i:<4} {nm:<40} {r['weight_current']:>8.2f} {r['weight_change']:>8.2f} {pct:>17} {r['status']:>8}")
+        else:
+            hdr = "Wt Increase" if kind == "buy" else "Wt Decrease"
+            print(f"{'Rank':<4} {'Company (Ticker)':<40} {'% Port':>8} {hdr:>12} {'% Change(shares)':>17}")
+            for i, r in enumerate(data, 1):
+                pct = f"{r['share_change_pct']:.2f}%" if r['share_change_pct'] is not None else "N/A"
+                nm = f"{r['company_name'][:30]} ({r['ticker']})"
+                print(f"{i:<4} {nm:<40} {r['weight_current']:>8.2f} {r['weight_change']:>12.2f} {pct:>17}")
+
+    _print("TOP 20 HOLDINGS", res["top_holdings"], "hold")
+    _print("TOP 20 BUYS", res["top_buys"], "buy")
+    _print("TOP 20 SELLS", res["top_sells"], "sell")
 
 
 if __name__ == "__main__":
