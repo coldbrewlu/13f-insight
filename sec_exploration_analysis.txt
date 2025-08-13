@@ -1,0 +1,400 @@
+13f-insight % python sec_directory_explorer.py
+🎯 SEC 13F历史文件探索器
+==================================================
+
+============================================================
+探索filing: 0000950123-25-002701
+============================================================
+🔍 探索SEC filing目录: 0000950123-25-002701
+📄 访问index页面: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/0000950123-25-002701-index.htm
+✅ 成功获取index页面
+📄 页面内容预览:
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta http-equiv="Last-Modified" content="Fri, 14 Feb 2025 21:00:02 GMT" />
+<title>EDGAR Filing Documents for 0000950123-25-002701</title>
+<link  rel="stylesheet" href="/edgar/search/global/css/bootstrap/bootstrap.min.css" type="text/css" />
+<link rel="stylesheet" type="text/css" href="/include/interactive2.css" />
+</head>
+<body style="margin: 0; font-size: 16px; ">
+<!-- SEC Web Analytics - For information please visit: https://www.sec.gov/privacy.htm#collectedinfo -->
+<noscript><iframe src="//www.googletagmanager.com/ns.html?id=GTM-TD3BKV"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.cre
+...
+
+📁 发现的所有文件 (12个):
+   1. 📄 其他 about-edgar
+   2. 📄 其他 browse-edgar?action=getcurrent
+   3. 📄 其他 index.htm
+   4. 📄 其他 companysearch.html
+   5. 📄 XML primary_doc.xml
+   6. 📄 XML primary_doc.xml
+   7. 📄 XML 39042.xml
+   8. 📄 XML 39042.xml
+   9. 📄 其他 0000950123-25-002701.txt
+  10. 📄 其他 browse-edgar?CIK=0001067983&action=getcompany
+  11. 📄 其他 browse-edgar?filenum=028-04545&action=getcompany
+  12. 📄 其他 browse-edgar?action=getcompany&SIC=6331&owner=include
+
+🎯 XML文件 (4个):
+  1. primary_doc.xml
+  2. primary_doc.xml
+  3. 39042.xml
+  4. 39042.xml
+
+🧪 测试XML文件内容...
+
+📄 测试文件: primary_doc.xml
+  📊 文件大小: 5,556 字符
+  🎯 13F指标: ['thirteenf', '13f']
+  ❌ 不像13F信息表
+
+📄 测试文件: primary_doc.xml
+  📊 文件大小: 5,556 字符
+  🎯 13F指标: ['thirteenf', '13f']
+  ❌ 不像13F信息表
+
+📄 测试文件: 39042.xml
+  📊 文件大小: 56,391 字符
+  🎯 13F指标: ['nameofissuer', 'cusip', 'infotable', 'informationtable', 'thirteenf']
+  ✅ 可能是13F信息表!
+  📄 内容预览:
+    <informationTable xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>ALLY FINL INC</nameOfIssuer>
+    <titleOfClass>COM</titleOfClass>
+    <cusip>02005N100</cusip>
+    <value>458035497</value>
+  ...
+
+📄 测试文件: 39042.xml
+  📊 文件大小: 56,391 字符
+  🎯 13F指标: ['nameofissuer', 'cusip', 'infotable', 'informationtable', 'thirteenf']
+  ✅ 可能是13F信息表!
+  📄 内容预览:
+    <informationTable xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <infoTable>
+    <nameOfIssuer>ALLY FINL INC</nameOfIssuer>
+    <titleOfClass>COM</titleOfClass>
+    <cusip>02005N100</cusip>
+    <value>458035497</value>
+  ...
+
+🎉 找到13F信息表: 39042.xml
+完整URL:
+  https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/39042.xml
+
+✅ 成功！可以用这个模式更新分析器:
+   文件模式: 39042.xml
+   应用到其他filing
+13f-insight % python sec_api_explorer.py
+🎯 SEC 13F历史文件全面分析
+============================================================
+
+================================================================================
+分析 filing: 0000950123-25-002701
+================================================================================
+🔍 使用SEC API探索filing文档: 0000950123-25-002701
+📡 调用SEC submissions API...
+✅ 找到filing信息:
+   表单类型: 13F-HR
+   提交日期: 2025-02-14
+   主要文档: xslForm13F_X02/primary_doc.xml
+   文档描述: 
+
+🗂️  探索filing目录结构...
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/0000950123-25-002701-index.json
+❌ HTTP 404
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/index.json
+✅ 成功获取index文件!
+📋 JSON格式index文件内容:
+{
+  "directory": {
+    "item": [
+      {
+        "last-modified": "2025-02-14 16:00:02",
+        "name": "0000950123-25-002701-index-headers.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2025-02-14 16:00:02",
+        "name": "0000950123-25-002701-index.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2025-02-14 16:00:02",
+        "name": "0000950123-25-002701.txt",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2025-02-14 16:00:02",
+        "name": "39042.xml",
+        "type": "text.gif",
+        "size": "56391"
+      },
+      {
+        "last-modified": "2025-02-14 16:00:02",
+        "name": "primary_doc.xml",
+        "type": "text.gif",
+        "size": "5556"
+      }
+    ],
+    "name": "/Archives/edgar/data/1067983/000095012325002701",
+    "parent-dir": "/Archives/edgar/data/1067983"
+  }
+}
+
+🎯 尝试替代XML文件模式...
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/form13fInfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/InfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/000095012325002701.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/0000950123-25-002701.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/doc1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/doc2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/xslForm13F_X01/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/Tables/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/InfoTable.txt
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/form13fInfoTable.txt
+❌ HTTP 404
+
+⏳ 等待1秒避免过快请求...
+
+================================================================================
+分析 filing: 0000950123-24-011775
+================================================================================
+🔍 使用SEC API探索filing文档: 0000950123-24-011775
+📡 调用SEC submissions API...
+✅ 找到filing信息:
+   表单类型: 13F-HR
+   提交日期: 2024-11-14
+   主要文档: xslForm13F_X02/primary_doc.xml
+   文档描述: 
+
+🗂️  探索filing目录结构...
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/0000950123-24-011775-index.json
+❌ HTTP 404
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/index.json
+✅ 成功获取index文件!
+📋 JSON格式index文件内容:
+{
+  "directory": {
+    "item": [
+      {
+        "last-modified": "2024-11-14 16:05:04",
+        "name": "0000950123-24-011775-index-headers.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-11-14 16:05:04",
+        "name": "0000950123-24-011775-index.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-11-14 16:05:04",
+        "name": "0000950123-24-011775.txt",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-11-14 16:05:04",
+        "name": "36917.xml",
+        "type": "text.gif",
+        "size": "60895"
+      },
+      {
+        "last-modified": "2024-11-14 16:05:04",
+        "name": "primary_doc.xml",
+        "type": "text.gif",
+        "size": "5556"
+      }
+    ],
+    "name": "/Archives/edgar/data/1067983/000095012324011775",
+    "parent-dir": "/Archives/edgar/data/1067983"
+  }
+}
+
+🎯 尝试替代XML文件模式...
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/form13fInfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/InfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/000095012324011775.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/0000950123-24-011775.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/doc1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/doc2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/xslForm13F_X01/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/Tables/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/InfoTable.txt
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324011775/form13fInfoTable.txt
+❌ HTTP 404
+
+⏳ 等待1秒避免过快请求...
+
+================================================================================
+分析 filing: 0000950123-24-008740
+================================================================================
+🔍 使用SEC API探索filing文档: 0000950123-24-008740
+📡 调用SEC submissions API...
+✅ 找到filing信息:
+   表单类型: 13F-HR
+   提交日期: 2024-08-14
+   主要文档: xslForm13F_X02/primary_doc.xml
+   文档描述: 
+
+🗂️  探索filing目录结构...
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/0000950123-24-008740-index.json
+❌ HTTP 404
+📄 尝试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/index.json
+✅ 成功获取index文件!
+📋 JSON格式index文件内容:
+{
+  "directory": {
+    "item": [
+      {
+        "last-modified": "2024-08-14 16:05:02",
+        "name": "0000950123-24-008740-index-headers.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-08-14 16:05:02",
+        "name": "0000950123-24-008740-index.html",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-08-14 16:05:02",
+        "name": "0000950123-24-008740.txt",
+        "type": "text.gif",
+        "size": ""
+      },
+      {
+        "last-modified": "2024-08-14 16:05:02",
+        "name": "34725.xml",
+        "type": "text.gif",
+        "size": "65052"
+      },
+      {
+        "last-modified": "2024-08-14 16:05:02",
+        "name": "primary_doc.xml",
+        "type": "text.gif",
+        "size": "5556"
+      }
+    ],
+    "name": "/Archives/edgar/data/1067983/000095012324008740",
+    "parent-dir": "/Archives/edgar/data/1067983"
+  }
+}
+
+🎯 尝试替代XML文件模式...
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/form13fInfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/InfoTable.htm
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/000095012324008740.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/0000950123-24-008740.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/doc1.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/doc2.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/xslForm13F_X01/form13fInfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/Tables/InfoTable.xml
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/InfoTable.txt
+❌ HTTP 404
+🔍 测试: https://www.sec.gov/Archives/edgar/data/1067983/000095012324008740/form13fInfoTable.txt
+❌ HTTP 404
+
+⏳ 等待1秒避免过快请求...
+
+================================================================================
+分析总结
+================================================================================
+❌ 未找到任何成功的13F XML文件模式
+🔍 可能需要尝试其他方法或分析不同的机构
+13f-insight % python quick_13f_finder.py
+ 13F文件快速查找器
+========================================
+测试13F文件格式
+CIK: 1067983, Accession: 0000950123-25-002701
+==================================================
+🔍 HTML表格         : ❌ HTTP 404
+🔍 HTML表格2        : ❌ HTTP 404
+🔍 HTML主文档        : ❌ HTTP 404
+🔍 XML表格          : ❌ HTTP 404
+🔍 XML表格2         : ❌ HTTP 404
+🔍 TXT主文档         : ✅ 可能是13F! (评分: 4/5)
+    大小: 63,328 字符
+    指标: ['nameofissuer', 'cusip', 'value', 'infotable']
+🔍 TXT表格          : ❌ HTTP 404
+🔍 文档1 HTML       : ❌ HTTP 404
+🔍 文档2 HTML       : ❌ HTTP 404
+🔍 文档1 XML        : ❌ HTTP 404
+🔍 文档2 XML        : ❌ HTTP 404
+
+ 找到 1 个可能的13F文件:
+
+1. TXT主文档 (评分: 4/5)
+   URL: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/0000950123-25-002701.txt
+   大小: 63,328 字符
+   预览: <SEC-DOCUMENT>0000950123-25-002701.txt : 20250214 <SEC-HEADER>0000950123-25-002701.hdr.sgml : 202502...
+
+✅ 建议使用这个文件:
+   类型: TXT主文档
+   URL: https://www.sec.gov/Archives/edgar/data/1067983/000095012325002701/0000950123-25-002701.txt
+   文件名模式: 0000950123-25-002701.txt
+
+ 可以尝试将分析器更新为使用此模式
